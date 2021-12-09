@@ -2,7 +2,7 @@
 My first project for the Introdcution To Robotic course in my third year of Bachelor's at FMI Unibuc.
 
 ## Game description
-Defuse the bomb by submitting the correct combination of symobls. At the beginning of each round the matrix will show the defuse combination, make sure you can remember it.
+Defuse the bomb by submitting the correct combination of symbols. At the beginning of each round the matrix will show the defuse combination, make sure you can remember it.
 
 ## Components
 * 8x8 LED Matrix
