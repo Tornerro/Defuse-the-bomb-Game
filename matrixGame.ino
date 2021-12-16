@@ -1,6 +1,7 @@
 #include<LiquidCrystal.h>
 #include<EEPROM.h>
 #include "LedControl.h" 
+#include "notes.h"
 
 byte up[8] = {
   B00011000,
@@ -57,6 +58,13 @@ byte circle[8] = {
   B00111100
 };
 
+String songsList[] = {
+  "OFF  ",
+  "Song1",
+  "Song2",
+  "Song3"
+};
+
 byte symbols[5][8];
 
 const int RS = 13;
@@ -65,6 +73,7 @@ const int d4 = 5;
 const int d5 = 4;
 const int d6 = 3;
 const int d7 = 2;
+
 
 const int dinPin = 12;
 const int clockPin = 11;
@@ -81,7 +90,8 @@ const int songAddress = 4;
 
 
 const int contrastPin = 6;
-const int buttonPin = 7;
+const int buttonLeftPin = A2;
+const int buttonRightPin = A3;
 const int lcdBrightnessPin = 9;
 
 const int xPin = A0;
@@ -89,6 +99,8 @@ const int yPin = A1;
 
 int xVal = 0;
 int yVal = 0;
+
+int c;
 
 bool joyMoved = 0;
 int currentMenuOption = 0;
@@ -113,7 +125,8 @@ LiquidCrystal lcd(RS, enable, d4, d5, d6, d7);
 
 int state = 0;
 
-bool buttonReading = HIGH;
+bool buttonLeftReading = HIGH;
+bool buttonRightReading = HIGH;
 bool lastReading = HIGH;
 bool buttonIsPressed = false;
 bool buttonWasPressed = false;
@@ -131,7 +144,7 @@ int matrixBrightnessLevel;
 int lastMatrixBrightnessLevel = 0;
 
 int currentSong = 1;
-int lastSong = 0;
+int lastSong = -1;
 
 int randNumber;
 int currentScore;
@@ -155,13 +168,36 @@ unsigned long gameOverTimer;
 const int GameOverBlinkInterval = 1000;
 bool gameOverMessageVisible;
 
+int highscore1;
+int highscore2;
+int highscore3;
+const int highscore1Address = 5;
+const int highscore2Address = 15;
+const int highscore3Address = 25;
+
+bool onOk = false;
+
+String currentName = "         ";
+String lastName = "";
+
+int letterIndex = 0;
+int lastLetterIndex = -1;
+
+
+char letter = ' ';
+char lastLetter = '0';
 
 void setup() {
   difficultyLevel = EEPROM.read(difficultyAddress);
   lcdContrastLevel = EEPROM.read(lcdContrastAddress);
   lcdBrightnessLevel = EEPROM.read(lcdBrightnessAddress);
   matrixBrightnessLevel = EEPROM.read(matrixBrightnessAddress);
-  pinMode(buttonPin, INPUT_PULLUP);
+  currentSong = EEPROM.read(songAddress);
+  highscore1 = 3;
+  highscore2 = 2;
+  highscore3 = 1;
+  pinMode(buttonLeftPin, INPUT_PULLUP);
+  pinMode(buttonRightPin, INPUT_PULLUP);
   pinMode(xPin, INPUT);
   pinMode(yPin, INPUT);
   lcd.begin(50, 2);
@@ -174,9 +210,6 @@ void setup() {
   lcd.print("game!");
   lc.shutdown(0, false);
   lc.setIntensity(0, matrixBrightnessLevel * 3);
-  for(int i = 0; i < rows; ++i) {
-    lc.setRow(0, i, B11111111);
-  }
   randomSeed(analogRead(5));
   for(int i=0; i<8; ++i){
     symbols[0][i] = up[i];
@@ -197,7 +230,8 @@ void setup() {
 }
 
 void loop() {
-//  Serial.println(state);
+  //Serial.println(yVal);
+  playSong();
   switch(state) {
     case 0: 
       welcomeMessage();
@@ -235,6 +269,15 @@ void loop() {
     case 11:
       showGameOver();
       break;
+    case 12:
+      showEnterName();
+      break;
+    case 13:
+      changeLetter();
+      break;
+    case 14:
+      overwriteHS();
+      break;
     default:
       break;
   }
@@ -242,13 +285,14 @@ void loop() {
 
 void welcomeMessage() {
   //Serial.println(0);
-  buttonReading = digitalRead (buttonPin);
+  buttonLeftReading = digitalRead (buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
   
-  if(buttonReading == LOW) {
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
   
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
   
   if(buttonWasPressed && !buttonIsPressed) {
     lcd.clear();
@@ -294,14 +338,6 @@ void showMenu() {
   yVal = analogRead(yPin);
 
   if(yVal > maxThreshold && joyMoved == false) {
-    currentMenuOption--;
-    joyMoved = true;
-    if(currentMenuOption == -1) {
-      currentMenuOption = 3;
-    }
-  }
-
-  if(yVal < minThreshold && joyMoved == false) {
     currentMenuOption++;
     joyMoved = true;
     if(currentMenuOption == 4) {
@@ -309,15 +345,24 @@ void showMenu() {
     }
   }
 
+  if(yVal < minThreshold && joyMoved == false) {
+    currentMenuOption--;
+    joyMoved = true;
+    if(currentMenuOption == -1) {
+      currentMenuOption = 3;
+    }
+  }
+
   if(yVal > minThreshold && yVal < maxThreshold) {
     joyMoved = false;
   }
 
-  buttonReading = digitalRead(buttonPin);
-  if(buttonReading == LOW) {
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
   if(buttonWasPressed && !buttonIsPressed) {
     buttonWasPressed = false;
     lcd.noBlink();
@@ -380,13 +425,14 @@ void showAbout() {
     lcd.scrollDisplayLeft();
     lastScrollTime = millis();
   }
-  buttonReading = digitalRead(buttonPin);
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
 
-  if(buttonReading == LOW) {
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
   
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
   
   if(buttonWasPressed && !buttonIsPressed) {
     lcd.clear();
@@ -435,14 +481,6 @@ void showSettings() {
   yVal = analogRead(yPin);
 
   if(yVal > maxThreshold && joyMoved == false) {
-    currentSettingsOption--;
-    joyMoved = true;
-    if(currentSettingsOption == -1) {
-      currentSettingsOption = 5;
-    }
-  }
-
-  if(yVal < minThreshold && joyMoved == false) {
     currentSettingsOption++;
     joyMoved = true;
     if(currentSettingsOption == 6) {
@@ -450,15 +488,26 @@ void showSettings() {
     }
   }
 
+  if(yVal < minThreshold && joyMoved == false) {
+    
+
+    currentSettingsOption--;
+    joyMoved = true;
+    if(currentSettingsOption == -1) {
+      currentSettingsOption = 5;
+    }
+  }
+
   if(yVal > minThreshold && yVal < maxThreshold) {
     joyMoved = false;
   }
 
-  buttonReading = digitalRead(buttonPin);
-  if(buttonReading == LOW) {
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
   if(buttonWasPressed && !buttonIsPressed) {
     buttonWasPressed = false;
     lcd.noBlink();
@@ -474,6 +523,9 @@ void showSettings() {
       state = 6;
         break;
       case 3:
+        for(int i = 0; i < rows; ++i) {
+          lc.setRow(0, i, B11111111);
+        }
         state = 7;
         break;
       case 4:
@@ -556,15 +608,17 @@ void showDifficulty() {
 
   if(xVal > maxThreshold && joyMoved == false) {
     joyMoved = true;
-    if(difficultyLevel > 1) {
-      difficultyLevel--;
+    if(difficultyLevel < 5) {
+      difficultyLevel ++;
     }
   }
 
   if(xVal < minThreshold && joyMoved == false) {
+    
+
     joyMoved = true;
-    if(difficultyLevel < 5) {
-      difficultyLevel ++;
+    if(difficultyLevel > 1) {
+      difficultyLevel--;
     }
   }
 
@@ -572,13 +626,14 @@ void showDifficulty() {
     joyMoved = false;
   }
 
-  buttonReading = digitalRead(buttonPin);
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
 
-  if(buttonReading == LOW) {
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
   
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
   
   if(buttonWasPressed && !buttonIsPressed) {
     lcd.clear();
@@ -613,15 +668,16 @@ void showLCDContrast() {
 
   if(xVal > maxThreshold && joyMoved == false) {
     joyMoved = true;
-    if(lcdContrastLevel > 1) {
-      lcdContrastLevel--;
+    if(lcdContrastLevel < 4) {
+      lcdContrastLevel ++;
     }
   }
 
   if(xVal < minThreshold && joyMoved == false) {
+    
     joyMoved = true;
-    if(lcdContrastLevel < 4) {
-      lcdContrastLevel ++;
+    if(lcdContrastLevel > 1) {
+      lcdContrastLevel--;
     }
   }
 
@@ -629,13 +685,14 @@ void showLCDContrast() {
     joyMoved = false;
   }
 
-  buttonReading = digitalRead(buttonPin);
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
 
-  if(buttonReading == LOW) {
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
   
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
   
   if(buttonWasPressed && !buttonIsPressed) {
     lcd.clear();
@@ -670,15 +727,16 @@ void showLCDBright() {
 
   if(xVal > maxThreshold && joyMoved == false) {
     joyMoved = true;
-    if(lcdBrightnessLevel > 1) {
-      lcdBrightnessLevel--;
+    if(lcdBrightnessLevel < 6) {
+      lcdBrightnessLevel ++;
     }
   }
 
   if(xVal < minThreshold && joyMoved == false) {
+    
     joyMoved = true;
-    if(lcdBrightnessLevel < 6) {
-      lcdBrightnessLevel ++;
+    if(lcdBrightnessLevel > 1) {
+      lcdBrightnessLevel--;
     }
   }
 
@@ -686,13 +744,14 @@ void showLCDBright() {
     joyMoved = false;
   }
 
-  buttonReading = digitalRead(buttonPin);
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
 
-  if(buttonReading == LOW) {
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
   
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
   
   if(buttonWasPressed && !buttonIsPressed) {
     lcd.clear();
@@ -727,15 +786,16 @@ void showGameBright() {
 
   if(xVal > maxThreshold && joyMoved == false) {
     joyMoved = true;
-    if(matrixBrightnessLevel > 1) {
-      matrixBrightnessLevel--;
+    if(matrixBrightnessLevel < 5) {
+      matrixBrightnessLevel ++;
     }
   }
 
   if(xVal < minThreshold && joyMoved == false) {
+    
     joyMoved = true;
-    if(matrixBrightnessLevel < 5) {
-      matrixBrightnessLevel ++;
+    if(matrixBrightnessLevel > 1) {
+      matrixBrightnessLevel--;
     }
   }
 
@@ -743,16 +803,20 @@ void showGameBright() {
     joyMoved = false;
   }
 
-  buttonReading = digitalRead(buttonPin);
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
 
-  if(buttonReading == LOW) {
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
   
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
   
   if(buttonWasPressed && !buttonIsPressed) {
     lcd.clear();
+    for(int i = 0; i < rows; ++i) {
+      lc.setRow(0, i, B00000000);
+    }
     state = 3;
     buttonWasPressed = false;
     lastMatrixBrightnessLevel = -1;
@@ -761,20 +825,57 @@ void showGameBright() {
 
 void showSong() {
   if(currentSong != lastSong) {
+    thisNote = 0;
+    EEPROM.update(songAddress, currentSong);
     lcd.clear();
     lcd.print(" Theme song");
     lcd.setCursor(0,1);
-    lcd.print("To be added :(");
+    lcd.print("Song: ");
+    
+    if(currentSong == 0) {
+      lcd.print("  ");
+    }
+    else {
+      lcd.print("< ");
+    }
+    lcd.print(songsList[currentSong]);
+    if(currentSong != 3) {
+      lcd.print(" >");
+    }
+
     lastSong = currentSong;
   }
 
-  buttonReading = digitalRead(buttonPin);
+  xVal = analogRead(xPin);
 
-  if(buttonReading == LOW) {
+  if(xVal > maxThreshold && joyMoved == false) {
+    joyMoved = true;
+    if(currentSong < 3) {
+      currentSong ++;
+    }
+  }
+
+  if(xVal < minThreshold && joyMoved == false) {
+    
+    joyMoved = true;
+    if(currentSong > 0) {
+      currentSong--;
+    }
+  }
+
+  if(xVal > minThreshold && xVal < maxThreshold) {
+    joyMoved = false;
+  }
+
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
+
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
   
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
+  
   
   if(buttonWasPressed && !buttonIsPressed) {
     lcd.clear();
@@ -824,25 +925,25 @@ void playGame() {
     lcd.print(scoreTimeString);
     xVal = analogRead(xPin);
     yVal = analogRead(yPin);
-    buttonReading = digitalRead(buttonPin);
+    buttonLeftReading = digitalRead(buttonLeftPin);
 
     if(yVal > maxThreshold && joyMoved == false && buttonWasPressed == false) {
-      symbolTyped = 0;
-      joyMoved = true;
-    }
-
-    if(yVal < minThreshold && joyMoved == false && buttonWasPressed == false) {
       symbolTyped = 1;
       joyMoved = true;
     }
 
+    if(yVal < minThreshold && joyMoved == false && buttonWasPressed == false) {
+      symbolTyped = 0;
+      joyMoved = true;
+    }
+
     if(xVal > maxThreshold && joyMoved == false && buttonWasPressed == false) {
-      symbolTyped = 3;
+      symbolTyped = 2;
       joyMoved = true;
     }
   
     if(xVal < minThreshold && joyMoved == false && buttonWasPressed == false) {
-      symbolTyped = 2;
+      symbolTyped = 3;
       joyMoved = true;
     }
 
@@ -850,11 +951,11 @@ void playGame() {
       joyMoved = false;
     }
 
-    if(buttonReading == LOW && joyMoved == false) {
+    if(buttonLeftReading == LOW && joyMoved == false) {
     buttonWasPressed = true;
   }
   
-    buttonIsPressed = !buttonReading;
+    buttonIsPressed = !buttonLeftReading;
     
     if(buttonWasPressed && !buttonIsPressed) {
       symbolTyped = 4;
@@ -909,6 +1010,9 @@ void showGameOver() {
     case 2:
       gameOver2();
       break;
+    case 3:
+      gameOver3();
+      break;
     default:
       break;
   }
@@ -934,13 +1038,14 @@ void gameOver1() {
     gameOverTimer = millis();
   }
 
-  buttonReading = digitalRead(buttonPin);
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
 
-  if(buttonReading == LOW) {
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
   
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
   
   if(buttonWasPressed && !buttonIsPressed) {
     gameOverState = 2;
@@ -954,17 +1059,306 @@ void gameOver1() {
 }
 
 void gameOver2() {
-  buttonReading = digitalRead(buttonPin);
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
 
-  if(buttonReading == LOW) {
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
     buttonWasPressed = true;
   }
   
-  buttonIsPressed = !buttonReading;
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
   
   if(buttonWasPressed && !buttonIsPressed) {
-    state = 1;
+    if(currentScore > highscore3) {
+      buttonWasPressed = false;
+      gameOverState = 3;
+      lcd.clear();
+      lcd.print("New highscore!");
+      lcd.setCursor(0, 1);
+      lcd.print("Enter your name");
+    }
+    else {
+      state = 1;
+      buttonWasPressed = false;
+      lcd.clear();
+    }
+  }
+}
+
+void gameOver3() {
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
+
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
+    buttonWasPressed = true;
+  }
+  
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
+  
+  if(buttonWasPressed && !buttonIsPressed) {
+    state = 12;
+    currentName = "         ";
+    lastName = "";
     buttonWasPressed = false;
+    letterIndex = 0;
+    lastLetterIndex = -1;
+    onOk = false;
+    lastLetter = '0';
     lcd.clear();
+    
+  }
+}
+
+void showEnterName() {
+  if(currentName != lastName) {
+    Serial.println(1);
+    lastName = currentName;
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("Name: ");
+    lcd.print(currentName);
+    lcd.setCursor(7, 1);
+    lcd.print("OK");
+  }
+  if(letterIndex != lastLetterIndex) {
+    Serial.println(2);
+    lastLetterIndex = letterIndex;
+    lcd.setCursor(6 + letterIndex, 0);
+  }
+  
+  if(millis() - lastBlink > blinkInterval) {
+    if(isBlinking) {
+      lcd.noBlink();
+      lastBlink = millis();
+    }
+    else {
+      lcd.blink();
+      lastBlink = millis();
+    }
+    isBlinking = !isBlinking;
+  }
+
+  xVal = analogRead(xPin);
+
+  if(onOk == false) {
+  
+    if(xVal > maxThreshold  && joyMoved == false) {
+      joyMoved = true;
+      if(letterIndex < 8) {
+        letterIndex ++;
+      }
+    }
+  
+    if(xVal < minThreshold  && joyMoved == false) {
+      joyMoved = true;
+      if(letterIndex >0) {
+        letterIndex --;
+      }
+    }
+    
+  }
+
+  yVal = analogRead(yPin);
+
+  if(yVal < minThreshold && joyMoved == false) {
+    joyMoved = true;
+    if(onOk == true) {
+      Serial.println(yVal);
+      onOk = false;
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("Name: ");
+      lcd.print(currentName);
+      lcd.setCursor(7, 1);
+      lcd.print("OK");
+      lcd.setCursor(6 + letterIndex, 0);
+    }
+  }
+
+  if(yVal > maxThreshold && joyMoved == false) {
+    joyMoved = true;
+    if(onOk == false) {
+      Serial.println(yVal);
+      onOk = true;
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("Name: ");
+      lcd.print(currentName);
+      lcd.setCursor(7, 1);
+      lcd.print("OK");
+      lcd.setCursor(6, 1);
+    }
+  }
+
+  if(xVal > minThreshold && xVal < maxThreshold && yVal > minThreshold && yVal < maxThreshold) {
+    joyMoved = false;
+  }
+
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
+
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
+    buttonWasPressed = true;
+  }
+  
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
+  
+  if(buttonWasPressed && !buttonIsPressed) {
+    buttonWasPressed = false;
+    if(onOk == false) {
+      lcd.noBlink();
+      lastLetterIndex = -1;
+      buttonWasPressed = false;
+      letter = currentName[letterIndex];
+      lcd.clear();
+      state = 13;
+    }
+    else {
+      Serial.println(currentName);
+      state = 14;
+    }
+  }
+}
+
+void changeLetter() {
+  if(letter != lastLetter) {
+    lcd.clear();
+    lastLetter = letter;
+    lcd.setCursor(0, 0);
+    lcd.print("Letter: ");
+    lcd.print(letter);
+  }
+
+  xVal = analogRead(xPin);
+
+  if(xVal > maxThreshold && joyMoved == false) {
+    joyMoved = true;
+    if(letter == ' ') {
+      letter = 'A';
+    }
+    else if(letter < 'Z') {
+      letter ++;
+    }
+  }
+
+  if(xVal < minThreshold && joyMoved == false) {
+    joyMoved = true;
+    if(letter == 'A') {
+      letter = ' ';
+    }
+    else if(letter > 'A') {
+      letter --;
+    }
+  }
+
+  if(xVal > minThreshold && xVal < maxThreshold) {
+    joyMoved = false;
+  }
+
+  buttonLeftReading = digitalRead(buttonLeftPin);
+  buttonRightReading = digitalRead (buttonRightPin);
+
+  if(buttonLeftReading == LOW || buttonRightReading == LOW) {
+    buttonWasPressed = true;
+  }
+  
+  buttonIsPressed = !buttonLeftReading || !buttonRightReading;
+  
+  if(buttonWasPressed && !buttonIsPressed) {
+    currentName[letterIndex] = letter;
+    buttonWasPressed = false;
+    letter = currentName[letterIndex];
+    lcd.clear();
+    state = 12;
+  }
+}
+
+void overwriteHS() {
+  if(currentScore > highscore1) {
+    highscore3 = highscore 2;
+    for(int i = 16; i <= 24; ++i) {
+      c = EEPROM.read(i);
+      EEPROM.update(i + 10, c);
+    }
+
+    highscore2 = highscore1;
+    for(int i = 6; i <= 14; ++i) {
+      c = EEPROM.read(i);
+      EEPROM.update(i + 10, c);
+    }
+
+    highscore1 = currentScore;
+    for(int i = 0; i < 9; ++i) {
+      EEPROM.update(i + 6, currentName[i]);
+    }
+  }
+  else if(currentScore > highscore2) {
+    highscore3 = highscore 2;
+    for(int i = 16; i <= 24; ++i) {
+      c = EEPROM.read(i);
+      EEPROM.update(i + 10, c);
+    }
+
+    highscore2 = currentScore;
+    for(int i = 0; i < 9; ++i) {
+      EEPROM.update(i + 16, currentName[i]);
+    }
+  }
+  else if(currentScore > highscore3) {
+    highscore3 = currentScore;
+    for(int i = 0; i < 9; ++i) {
+      EEPROM.update(i + 26, currentName[i]);
+    }
+  }
+  state = 1;
+}
+
+void playSong() {
+  switch(currentSong) {
+    case 0:
+      return;
+      break;
+    case 1:
+      divider = song1[thisNote + 1];
+      break;
+    case 2:
+      divider = song2[thisNote + 1];
+      break;
+    case 3:
+      divider = song3[thisNote + 1];
+      break;
+    default:
+      break;
+  }
+
+  if (divider > 0) {
+    // regular note, just proceed
+    noteDuration = (wholenote[currentSong]) / divider;
+  } else if (divider < 0) {
+    // dotted notes are represented with negative durations!!
+    noteDuration = (wholenote[currentSong]) / abs(divider);
+    noteDuration *= 1.5; // increases the duration in half for dotted notes
+  }
+
+  // we only play the note for 90% of the duration, leaving 10% as a pause
+  switch(currentSong) {
+  case 1:
+    tone(buzzerPin, song1[thisNote], noteDuration*0.9);
+    break;
+  case 2:
+    tone(buzzerPin, song2[thisNote], noteDuration*0.9);
+    break;
+  case 3:
+    tone(buzzerPin, song3[thisNote], noteDuration*0.9);
+    break;
+  default:
+    break;
+  }
+  // Wait for the specief duration before playing the next note.
+  if(millis() - songTimer >= noteDuration) {
+    songTimer = millis();
+    thisNote += 2;
+    if(thisNote >= notes[currentSong]* 2) thisNote = 0;
+    noTone(buzzerPin);
   }
 }
