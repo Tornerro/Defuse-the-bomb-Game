@@ -103,32 +103,7 @@ int song1[] = {
 };
 
 int song2[] = {
-  //Keyboard cat
-
-  REST,1,
-    REST,1,
-    NOTE_C4,4, NOTE_E4,4, NOTE_G4,4, NOTE_E4,4, 
-    NOTE_C4,4, NOTE_E4,8, NOTE_G4,-4, NOTE_E4,4,
-    NOTE_A3,4, NOTE_C4,4, NOTE_E4,4, NOTE_C4,4,
-    NOTE_A3,4, NOTE_C4,8, NOTE_E4,-4, NOTE_C4,4,
-    NOTE_G3,4, NOTE_B3,4, NOTE_D4,4, NOTE_B3,4,
-    NOTE_G3,4, NOTE_B3,8, NOTE_D4,-4, NOTE_B3,4,
-
-    NOTE_G3,4, NOTE_G3,8, NOTE_G3,-4, NOTE_G3,8, NOTE_G3,4, 
-    NOTE_G3,4, NOTE_G3,4, NOTE_G3,8, NOTE_G3,4,
-    NOTE_C4,4, NOTE_E4,4, NOTE_G4,4, NOTE_E4,4, 
-    NOTE_C4,4, NOTE_E4,8, NOTE_G4,-4, NOTE_E4,4,
-    NOTE_A3,4, NOTE_C4,4, NOTE_E4,4, NOTE_C4,4,
-    NOTE_A3,4, NOTE_C4,8, NOTE_E4,-4, NOTE_C4,4,
-    NOTE_G3,4, NOTE_B3,4, NOTE_D4,4, NOTE_B3,4,
-    NOTE_G3,4, NOTE_B3,8, NOTE_D4,-4, NOTE_B3,4,
-
-    NOTE_G3,-1, 
-};
-
-int song3[] = {
-//  
-//  // Cantina Band - Star wars 
+    // Cantina Band - Star wars 
   NOTE_B4,-4, NOTE_E5,-4, NOTE_B4,-4, NOTE_E5,-4, 
   NOTE_B4,8,  NOTE_E5,-4, NOTE_B4,8, REST,8,  NOTE_AS4,8, NOTE_B4,8, 
   NOTE_B4,8,  NOTE_AS4,8, NOTE_B4,8, NOTE_A4,8, REST,8, NOTE_GS4,8, NOTE_A4,8, NOTE_G4,8,
@@ -146,25 +121,22 @@ int song3[] = {
   NOTE_B4, 2, NOTE_D5,2,
 
   NOTE_F5, -4, NOTE_E5,-4, NOTE_AS4,8, NOTE_AS4,8, NOTE_B4,4, NOTE_G4,4, 
-  
 };
 
 const int buzzerPin = 7;
 
-int tempos[] = {0, 50, 144, 140};
+int tempos[] = {0, 50, 140};
 
 int notes[] = {
   0, 
   sizeof(song1) / sizeof(song1[0]) / 2,
   sizeof(song2) / sizeof(song2[0]) / 2,
-  sizeof(song3) / sizeof(song3[0]) / 2
 };
 
 int wholenote[] = {
   0,
   (60000 * 2) / tempos[1],
-  (60000 * 2) / tempos[2],
-  (60000 * 2) / tempos[3]
+  (60000 * 2) / tempos[2]
 };
 
 int divider = 0, noteDuration =0, thisNote = 0;
